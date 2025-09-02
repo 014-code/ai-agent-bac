@@ -11,6 +11,12 @@ spring:
       base-url: http://localhost:11434
       chat:
         model: gemma3:1b
+    chat:
+      observation:
+        enabled: false
+logging:
+  level:
+    org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: debug
 server:
   port: 8101
   servlet:
@@ -27,6 +33,9 @@ springdoc:
     - group: 'default'
       paths-to-match: '/**'
       packages-to-scan: com.mashang.web.controller
+app:
+  chat-memory:
+    dir: ./chat-memory  # 对话记忆存储目录
 
 knife4j:
   enable: true
