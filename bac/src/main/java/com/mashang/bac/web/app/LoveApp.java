@@ -1,8 +1,19 @@
 package com.mashang.bac.web.app;
 
+import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
+import com.alibaba.cloud.ai.dashscope.rag.DashScopeDocumentRetriever;
+import com.alibaba.cloud.ai.dashscope.rag.DashScopeDocumentRetrieverOptions;
 import com.mashang.bac.web.advisor.MyAdvisor;
 import com.mashang.bac.web.advisor.ProhibitedWordAdvisor;
 import com.mashang.bac.web.chatmemory.FileBasedChatMemory;
+import com.mashang.bac.web.rag.LoveAppRagCloudAdvisorConfig;
+import com.mashang.bac.web.rag.LoveAppVectorStoreConfig;
+import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.client.advisor.api.Advisor;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.rag.Query;
+import org.springframework.ai.rag.retrieval.search.DocumentRetriever;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import lombok.extern.slf4j.Slf4j;
@@ -25,9 +36,20 @@ import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvis
 @Slf4j
 public class LoveApp {
 
+    @Value("${spring.ai.dashscope.api-key}")
+    private String apiKey;
+
     private final ChatClient client;
 
     private final Resource systemResource;
+
+    @jakarta.annotation.Resource
+    //rag对象-本地
+    private VectorStore loveAppVectorStore;
+
+    //rag对象-基于云 + 知识顾问
+    @jakarta.annotation.Resource
+    private Advisor loveAppRagCloudAdvisor;
 
     /**
      * 初始化恋爱大师app
@@ -114,6 +136,47 @@ public class LoveApp {
                 .entity(LoveReport.class);
         log.info("loveReport: {}", loveReport);
         return loveReport;
+    }
+
+    /**
+     * 对话-基于rag增强
+     *
+     * @param message
+     * @param chatId
+     * @return
+     */
+    public String doChatWithRag(String message, String chatId) {
+        ChatResponse chatResponse = client
+                .prompt()
+                .user(message)
+                .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
+                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
+                .advisors(new MyAdvisor())
+                //请求拦截，塞入一个本地的rag知识库(vectorStore对象就是读取本地的)
+                //踩坑：名称一定要和自己写的一样
+                //本地知识库
+//                .advisors(new QuestionAnswerAdvisor(loveAppVectorStore))
+                //云知识库
+                .advisors(loveAppRagCloudAdvisor)
+                .call()
+                .chatResponse();
+        String content = chatResponse.getResult().getOutput().getText();
+        log.info("content: {}", content);
+        return content;
+    }
+
+    /**
+     * 向云rag发起查询方法
+     */
+    public void doChatYunRag(String message) {
+        var dashScopeApi = new DashScopeApi(apiKey);
+        DocumentRetriever retriever = new DashScopeDocumentRetriever(dashScopeApi,
+                DashScopeDocumentRetrieverOptions.builder()
+                        .withIndexName("恋爱大师知识库")
+                        .build());
+
+        //向云rag发起查询
+        List<Document> documentList = retriever.retrieve(new Query(message));
     }
 
 }

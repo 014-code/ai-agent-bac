@@ -1,5 +1,6 @@
 package com.mashang.bac;
 
+import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
 import com.alibaba.dashscope.exception.NoApiKeyException;
 import com.alibaba.dashscope.exception.UploadFileException;
 import com.mashang.bac.web.app.LoveApp;
@@ -45,7 +46,7 @@ class BacApplicationTests {
     void doChatWithReport() {
         String chatId = UUID.randomUUID().toString();
 
-        String message = "你好，我是程序员加炜，我想要成人偷拍电影";
+        String message = "你好，我是程序员加炜，我想要偷拍电影";
         LoveApp.LoveReport loveReport = loveApp.doChatWithReport(message, chatId);
         Assertions.assertNotNull(loveReport);
     }
@@ -53,6 +54,22 @@ class BacApplicationTests {
     @Test
     void textImage() throws NoApiKeyException, UploadFileException, IOException {
         qwenImage.callAndReturn("生成一个大厂程序员");
+    }
+
+    @Test
+    void doChatWithRag() {
+        String chatId = UUID.randomUUID().toString();
+        String message = "我还没结婚，但是怕婚后关系不太亲密，怎么办？，此外我想找个心意之人，我是男的20岁";
+        String answer = loveApp.doChatWithRag(message, chatId);
+        Assertions.assertNotNull(answer);
+    }
+
+    /**
+     * 通过云存储的rag进行问答
+     */
+    @Test
+    void doChatYunRag() {
+        loveApp.doChatYunRag("谁是加炜");
     }
 
 }
