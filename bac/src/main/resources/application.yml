@@ -1,7 +1,17 @@
 spring:
+  datasource:
+    url: jdbc:postgresql://rm-cn-smw4f95lh0004y3o.rwlb.rds.aliyuncs.com/ai_agent
+    username: my_user
+    password: Himmd2333
   application:
     name: ai-agent
   ai:
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        dimensions: 1536
+        distance-type: COSINE_DISTANCE
+        max-document-batch-size: 10000
     dashscope:
       api-key: sk-8bf76e45372c4ab38c67fb16f4018050
       chat:

@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * rag检索顾问
+ * rag检索顾问-云知识库
  */
 @Configuration
 public class LoveAppRagCloudAdvisorConfig {

@@ -3,6 +3,9 @@ package com.mashang.bac.web.advisor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.advisor.api.*;
 import org.springframework.ai.chat.model.MessageAggregator;
+import org.springframework.ai.rag.Query;
+import org.springframework.ai.rag.preretrieval.query.transformation.QueryTransformer;
+import org.springframework.ai.rag.preretrieval.query.transformation.RewriteQueryTransformer;
 import reactor.core.publisher.Flux;
 
 import java.util.HashMap;
@@ -93,4 +96,5 @@ public class MyAdvisor implements CallAroundAdvisor, StreamAroundAdvisor {
         Flux<AdvisedResponse> advisedResponseFlux = chain.nextAroundStream(advisedRequest);
         return (new MessageAggregator()).aggregateAdvisedResponse(advisedResponseFlux, this::observeAfter);
     }
+
 }

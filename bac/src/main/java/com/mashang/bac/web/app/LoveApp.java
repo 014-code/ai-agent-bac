@@ -9,11 +9,22 @@ import com.mashang.bac.web.chatmemory.FileBasedChatMemory;
 import com.mashang.bac.web.rag.LoveAppRagCloudAdvisorConfig;
 import com.mashang.bac.web.rag.LoveAppVectorStoreConfig;
 import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.client.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.rag.Query;
+import org.springframework.ai.rag.generation.augmentation.ContextualQueryAugmenter;
+import org.springframework.ai.rag.preretrieval.query.expansion.MultiQueryExpander;
+import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
+import org.springframework.ai.rag.preretrieval.query.transformation.QueryTransformer;
+import org.springframework.ai.rag.preretrieval.query.transformation.RewriteQueryTransformer;
 import org.springframework.ai.rag.retrieval.search.DocumentRetriever;
+import org.springframework.ai.rag.retrieval.search.VectorStoreDocumentRetriever;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +39,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_CONVERSATION_ID_KEY;
 import static org.springframework.ai.chat.client.advisor.AbstractChatMemoryAdvisor.CHAT_MEMORY_RETRIEVE_SIZE_KEY;
@@ -44,12 +56,19 @@ public class LoveApp {
     private final Resource systemResource;
 
     @jakarta.annotation.Resource
+    private ChatModel dashscopeChatModel;
+
+    @jakarta.annotation.Resource
     //rag对象-本地
     private VectorStore loveAppVectorStore;
 
     //rag对象-基于云 + 知识顾问
     @jakarta.annotation.Resource
     private Advisor loveAppRagCloudAdvisor;
+
+    //rag对象-基于pgVector存储
+    @jakarta.annotation.Resource
+    private VectorStore pgVectorVectorStore;
 
     /**
      * 初始化恋爱大师app
@@ -146,9 +165,11 @@ public class LoveApp {
      * @return
      */
     public String doChatWithRag(String message, String chatId) {
+        //改写
+        String writeStr = write(message);
         ChatResponse chatResponse = client
                 .prompt()
-                .user(message)
+                .user(writeStr)
                 .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
                         .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
                 .advisors(new MyAdvisor())
@@ -157,9 +178,16 @@ public class LoveApp {
                 //本地知识库
 //                .advisors(new QuestionAnswerAdvisor(loveAppVectorStore))
                 //云知识库
-                .advisors(loveAppRagCloudAdvisor)
+//                .advisors(loveAppRagCloudAdvisor)
+                //pg知识库
+                .advisors(new QuestionAnswerAdvisor(pgVectorVectorStore))
                 .call()
                 .chatResponse();
+        //当用户问题发送到 AI 模型时，Advisor 会查询向量数据库来获取与用户问题相关的文档，并将这些文档作为‌上下文附加到用户查询中
+        var qaAdvisor = QuestionAnswerAdvisor.builder(pgVectorVectorStore)
+                .searchRequest(SearchRequest.builder().similarityThreshold(0.8d).topK(6).build());
+        //输出
+        log.info("qaAdvisor: {}", qaAdvisor);
         String content = chatResponse.getResult().getOutput().getText();
         log.info("content: {}", content);
         return content;
@@ -177,6 +205,121 @@ public class LoveApp {
 
         //向云rag发起查询
         List<Document> documentList = retriever.retrieve(new Query(message));
+    }
+
+    /**
+     * 改写用户提示词方法
+     *
+     * @return
+     */
+    public String write(String message) {
+        // 创建 QueryTransformer
+        QueryTransformer queryTransformer = RewriteQueryTransformer.builder()
+                .chatClientBuilder(ChatClient.builder(dashscopeChatModel))
+                .build();
+
+        // 改写用户查询
+        Query originalQuery = new Query(message);
+        Query transformedQuery = queryTransformer.transform(originalQuery);
+        String rewrittenMessage = transformedQuery.text();
+        return rewrittenMessage;
+    }
+
+    /**
+     * 查询压缩方法
+     *
+     * @return
+     */
+    public String compress() {
+        //当历史对话记录里面用户提示词是UserMessage的时候就不和用户继续废话了，直接固定写死回答
+        Query query = Query.builder()
+                .text("编程导航有啥内容？")
+                .history(new UserMessage("谁是程序员鱼皮？"),
+                        new AssistantMessage("编程导航的创始人 codefather.cn"))
+                .build();
+
+        QueryTransformer queryTransformer = CompressionQueryTransformer.builder()
+                .chatClientBuilder(ChatClient.builder(dashscopeChatModel))
+                .build();
+
+        Query transformedQuery = queryTransformer.transform(query);
+        String rewrittenMessage = transformedQuery.text();
+        return rewrittenMessage;
+    }
+
+    /**
+     * 多查询扩展
+     *
+     * @return
+     */
+    public void searchS() {
+        //其实就是如果当前提示词查不到就改用户提示词，好听些就是换一种方式查,换关键词
+        MultiQueryExpander queryExpander = MultiQueryExpander.builder()
+                .chatClientBuilder(ChatClient.builder(dashscopeChatModel))
+                //改写几次？
+                .numberOfQueries(3)
+                .build();
+        List<Query> queries = queryExpander.expand(new Query("啥是程序员鱼皮？他会啥？"));
+        //结果
+        log.info("ru: {}", queries);
+    }
+
+    public void docSearch() {
+        DocumentRetriever retriever = VectorStoreDocumentRetriever.builder()
+                .vectorStore(pgVectorVectorStore)       // 在哪个图书馆找
+                .similarityThreshold(0.7)      // 相似度要求：至少要70%相关才给我
+                .topK(5)                       // 最多给我5本书
+                .filterExpression(              // 额外筛选条件：
+                        new FilterExpressionBuilder()
+                                .eq("type", "web")         // 只要"类型是web"的书
+                                .build())
+                .build();
+        // 就像说："帮我找关于'程序员鱼皮'的书"
+        List<Document> documents = retriever.retrieve(new Query("谁是程序员鱼皮"));
+
+//        // 就像这次特意嘱咐："找关于鱼皮的书，但只要类型是'boy'的"
+//        Query query = Query.builder()
+//                .text("谁是鱼皮？")  // 核心问题
+//                .context(Map.of(
+//                        VectorStoreDocumentRetriever.FILTER_EXPRESSION,
+//                        "type == 'boy'"  // 临时筛选条件：只要男孩类型的
+//                ))
+//                .build();
+
+//        // 为用户A检索时，只给他看适合他年龄的内容
+//        Query query = Query.builder()
+//                .text("如何维持长期关系")
+//                .context(Map.of(
+//                        VectorStoreDocumentRetriever.FILTER_EXPRESSION,
+//                        "min_age <= 25 && max_age >= 25"  // 适合25岁的内容
+//                ))
+//                .build();
+    }
+
+    /**
+     * 空上下文处理
+     */
+    public void nullText() {
+//默认情况下，RetrievalAugmentationAdvisor 不允许检索的上下文为空。当没有找到相关文档时，
+// 它会指示模型不要回答用户查询。这是一种保守的策略，可以防止模型在没有足够信息的情况下生成不准确的回答。
+//但在某些场景下，我们可能希望即使在没有相关文档的情况下也能为用户提供回答，比如即使没有特定知识库支持也能回答的通用问题。
+// 可以通过配置 ContextualQueryAugmenter 上下文查询增强器来实现。
+        Advisor retrievalAugmentationAdvisor = RetrievalAugmentationAdvisor.builder()
+                .documentRetriever(VectorStoreDocumentRetriever.builder()
+                        .similarityThreshold(0.50)
+                        .vectorStore(pgVectorVectorStore)
+                        .build())
+                .queryAugmenter(ContextualQueryAugmenter.builder()
+                        .allowEmptyContext(true)
+                        .build())
+                .build();
+
+//        为了提供更友好的错误处理机制，ContextualQueryAugmenter允许我们自定义提示模板，包括正常情况下使用的提示模板和上下文为空时使用的提示模板：
+//        QueryAugmenter queryAugmenter = ContextualQueryAugmenter.builder()
+//                .promptTemplate(customPromptTemplate)
+//                .emptyContextPromptTemplate(emptyContextPromptTemplate)
+//                .build();
+
     }
 
 }
