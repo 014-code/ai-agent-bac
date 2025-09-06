@@ -1,8 +1,9 @@
-package com.mashang.bac.web.rag;
+package com.mashang.bac.web.rag.config;
 
 import com.alibaba.cloud.ai.dashscope.api.DashScopeApi;
 import com.alibaba.cloud.ai.dashscope.rag.DashScopeDocumentRetriever;
 import com.alibaba.cloud.ai.dashscope.rag.DashScopeDocumentRetrieverOptions;
+import com.mashang.bac.web.rag.factory.LoveAppContextualQueryAugmenterFactory;
 import org.springframework.ai.chat.client.advisor.RetrievalAugmentationAdvisor;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
 import org.springframework.ai.rag.retrieval.search.DocumentRetriever;
@@ -30,6 +31,8 @@ public class LoveAppRagCloudAdvisorConfig {
                         .build());
         //构造知识库顾问
         return RetrievalAugmentationAdvisor.builder()
+                //使用增强知识顾问-上下文增强
+                .queryAugmenter(LoveAppContextualQueryAugmenterFactory.createInstance())
                 .documentRetriever(documentRetriever)
                 .build();
     }

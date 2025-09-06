@@ -42,12 +42,17 @@ public class LoveAppDocumentLoader {
             for (Resource resource : resources) {
                 //获取名称
                 String fileName = resource.getFilename();
+                //直接切分文件名称来作为标签
+                String status = fileName.substring(fileName.length() - 6, fileName.length() - 4);
                 //初始化mdconfig配置
                 MarkdownDocumentReaderConfig config = MarkdownDocumentReaderConfig.builder()
                         .withHorizontalRuleCreateDocument(true)
                         .withIncludeCodeBlock(false)
                         .withIncludeBlockquote(false)
+                        //名称源信息
                         .withAdditionalMetadata("filename", fileName)
+                        //恋爱状态源信息-相当于给每个文章打上标签，下次查找会先按照标签找，更高效
+                        .withAdditionalMetadata("status", status)
                         .build();
                 //转成mdDocument对象
                 MarkdownDocumentReader reader = new MarkdownDocumentReader(resource, config);

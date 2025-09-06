@@ -14,6 +14,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -77,7 +78,27 @@ class BacApplicationTests {
      */
     @Test
     void doChatYunRag() {
-        loveApp.doChatYunRag("谁是加炜");
+        List<Document> documents = loveApp.doChatYunRag("谁是加炜");
+        Assertions.assertNotNull(documents);
+        System.out.println("云RAG查询结果数量: " + documents.size());
+        
+        for (int i = 0; i < documents.size(); i++) {
+            Document doc = documents.get(i);
+            System.out.println("文档 " + (i + 1) + ": " + doc.getText());
+            System.out.println("元数据: " + doc.getMetadata());
+        }
+    }
+
+    /**
+     * 云RAG对话测试 - 结合查询结果和AI回答
+     */
+    @Test
+    void doChatWithYunRag() {
+        String chatId = UUID.randomUUID().toString();
+        String message = "谁是加炜？";
+        String answer = loveApp.doChatWithYunRag(message, chatId);
+        Assertions.assertNotNull(answer);
+        System.out.println("云RAG对话回答: " + answer);
     }
 
     @Test
@@ -92,6 +113,33 @@ class BacApplicationTests {
         //查询请求对象构造查询-Spring关键词 + 得分最高的前五个
         List<Document> results = pgVectorVectorStore.similaritySearch(SearchRequest.builder().query("Spring").topK(5).build());
         Assertions.assertNotNull(results);
+    }
+
+    /**
+     * 测试智能状态识别检索器
+     */
+    @Test
+    void testSmartStatusRag() {
+        String chatId = UUID.randomUUID().toString();
+        
+        // 测试智能状态识别 - AI会自动分析用户状态
+        String message1 = "我今年25岁，单身，不知道怎么追女生";
+        String answer1 = loveApp.doChatWithSmartRag(message1, chatId);
+        Assertions.assertNotNull(answer1);
+        System.out.println("智能状态识别结果: " + answer1);
+        
+        // 测试多状态组合查询
+        List<String> statusList = Arrays.asList("单身", "恋爱中");
+        String message2 = "我想了解恋爱技巧";
+        String answer2 = loveApp.doChatWithMultiStatusRag(message2, chatId, statusList);
+        Assertions.assertNotNull(answer2);
+        System.out.println("多状态组合结果: " + answer2);
+        
+        // 测试年龄+状态组合查询
+        String message3 = "我和老公结婚3年了，最近总是吵架";
+        String answer3 = loveApp.doChatWithAgeStatusRag(message3, chatId, "已婚", 25, 35);
+        Assertions.assertNotNull(answer3);
+        System.out.println("年龄+状态组合结果: " + answer3);
     }
 
 }

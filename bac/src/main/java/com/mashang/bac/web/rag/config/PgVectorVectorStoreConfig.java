@@ -1,4 +1,4 @@
-package com.mashang.bac.web.rag;
+package com.mashang.bac.web.rag.config;
 
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;

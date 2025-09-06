@@ -1,9 +1,11 @@
-package com.mashang.bac.web.rag;
+package com.mashang.bac.web.rag.config;
 
+import com.mashang.bac.web.rag.LoveAppDocumentLoader;
+import com.mashang.bac.web.rag.MyKeywordEnricher;
+import com.mashang.bac.web.rag.MyTokenTextSplitter;
 import jakarta.annotation.Resource;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
 import org.springframework.context.annotation.Bean;
@@ -23,6 +25,12 @@ public class LoveAppVectorStoreConfig {
 
     @Resource
     private LoveAppDocumentLoader loveAppDocumentLoader;
+
+    @Resource
+    private MyTokenTextSplitter myTokenTextSplitter;
+
+    @Resource
+    private MyKeywordEnricher myKeywordEnricher;
 
     /**
      * 本地向量存储方法
@@ -61,8 +69,12 @@ public class LoveAppVectorStoreConfig {
                 .build();
         //获取转成Document后的md文档
         List<Document> documents = loveAppDocumentLoader.loadMarkdowns();
-        //存入数据库
-        vectorStore.add(documents);
+        //切分一下
+        //存入切分后的到数据库-此切分不准确暂不使用
+//        List<Document> splitDocuments = myTokenTextSplitter.splitDocuments(documents);
+        //ai自动打标签-源信息
+        List<Document> enrichedDocuments = myKeywordEnricher.enrichDocuments(documents);
+        vectorStore.add(enrichedDocuments);
         return vectorStore;
     }
 
